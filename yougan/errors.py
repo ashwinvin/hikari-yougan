@@ -1,4 +1,4 @@
-__all__ = ("youganError", "AuthenticationError", "TrackLoadError")
+__all__ = ("YouganError", "AuthenticationError", "TrackLoadError")
 
 
 class YouganError(RuntimeError):
