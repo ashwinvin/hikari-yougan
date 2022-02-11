@@ -50,20 +50,21 @@ class Track:
         Returns none if the track is not from Youtube"""
         if self.ytid:
             return f"https://img.youtube.com/vi/{self.ytid}/mqdefault.jpg"
+        return None
 
     @classmethod
-    def from_dict(cls, payload):
-        info: dict[str, str] = payload["info"]
+    def from_dict(cls, payload: typing.Dict[str, typing.Any]) -> "Track":
+        info: typing.Dict[str, str] = payload["info"]
         return cls(
             payload["track"],  # base64 track identifier provided by lavalink
             author=info["author"],
             title=info["title"],
-            length=info["length"],
-            position=info["position"],
+            length=int(info["length"]),
+            position=int(info["position"]),
             uri=info["uri"],
             ytid=info.get("identifier", None),  # Identifier used by youtube
-            is_stream=info["isStream"],
-            is_seekable=info["isSeekable"],
+            is_stream=bool(info["isStream"]),
+            is_seekable=bool(info["isSeekable"]),
         )
 
     def __eq__(self, other: object) -> bool:
@@ -85,7 +86,7 @@ class SearchResult:
 
 
 class YTPlaylist:
-    def __init__(self, *, name: str, tracks: typing.Iterable[Track], selected_track: int):
+    def __init__(self, *, name: str, tracks: typing.List[Track], selected_track: int):
         self.name = name
         """Name of the youtube playlist."""
 

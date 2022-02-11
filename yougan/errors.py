@@ -10,7 +10,7 @@ class AuthenticationError(YouganError):
 
     node: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Invalid password provided for {self.node}"
 
 
@@ -19,7 +19,7 @@ class NodeAlreadyConnected(YouganError):
 
     node: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Node::{self.node} is already connected"
 
 

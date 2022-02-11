@@ -2,6 +2,7 @@ from __future__ import annotations
 import typing
 
 from hikari.events import Event
+from dataclasses import dataclass
 
 if typing.TYPE_CHECKING:
     from hikari import traits
@@ -13,37 +14,33 @@ class YouganEvent(Event):
     def app(self) -> traits.RESTAware:
         return self.app
 
-    @app.setter
-    def set_app(self, app):
-        self.app = app
 
-
+@dataclass
 class TrackStartEvent(YouganEvent):
-    def __init__(self, *, track: str, player: Player, app: traits.RESTAware) -> None:
-        super().__init__()
-        self.track = track
-        self.player = player
+    track: str
+    player: Player
+    app: traits.RESTAware
 
 
+@dataclass
 class TrackEndEvent(YouganEvent):
-    def __init__(self, *, track: str, reason: str, player: Player, app: traits.RESTAware) -> None:
-        super().__init__()
-        self.track = track
-        self.reason = reason
-        self.player = player
+    track: str
+    player: Player
+    reason: str
+    app: traits.RESTAware
 
 
+@dataclass
 class TrackStuckEvent(YouganEvent):
-    def __init__(self, *, track: str, threshold: int, player: Player, app: traits.RESTAware) -> None:
-        super().__init__()
-        self.track = track
-        self.threshold = threshold
-        self.player = player
+    track: str
+    threshold: int
+    player: Player
+    app: traits.RESTAware
 
 
+@dataclass
 class TrackExceptionEvent(YouganEvent):
-    def __init__(self, *, track: str, error: str, player: Player, app: traits.RESTAware) -> None:
-        super().__init__()
-        self.track = track
-        self.error = error
-        self.player = player
+    track: str
+    error: str
+    player: Player
+    app: traits.RESTAware

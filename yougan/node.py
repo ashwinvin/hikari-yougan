@@ -1,17 +1,17 @@
 from __future__ import annotations
+from dataclasses import dataclass
 
 import logging
 import typing
 
 from yougan.connection import Connection
-from yougan import stats
-from yougan import models
+from yougan import stats, models, errors
 
 if typing.TYPE_CHECKING:
     import aiohttp
     from hikari import guilds
     from hikari import snowflakes
-    from hikari import traits
+    from hikari import impl
 
     from yougan.player import Player
 
@@ -19,33 +19,37 @@ __all__: typing.Tuple[str, ...] = ("Node",)
 _LOGGER = logging.getLogger("yougan")
 
 
+@dataclass
 class Node:
-    def __init__(
-        self,
-        *,
-        name: str,
-        host: str,
-        port: int,
-        password: str,
-        app: traits.BotAware,
-        session: aiohttp.ClientSession = None,
-    ) -> None:
-        self.name = name
-        self.host = host
-        self.port = port
-        self.password = password
-        self.app = app
-        self.session: aiohttp.ClientSession = session
-        self.connection: Connection = None
-        self.is_connected = False
-        self.stats = stats.Stats()
-        self.players: typing.Mapping[snowflakes.SnowflakeishOr[guilds.Guild], Player] = {}
+    name: str
+    host: str
+    port: int
+    password: str
+    app: impl.GatewayBot
+    session: aiohttp.ClientSession
+
+    stats = stats.Stats()
+    is_connected = False
+    connection: typing.Optional[Connection] = None
+    players: typing.Dict[int, Player] = {}
 
     @property
-    def headers(self):
+    def headers(self) -> typing.Dict[str, str]:
         return {"Authorization": self.password, "Accept": "application/json"}
 
-    def get_player(self, guild: snowflakes.Snowflakeish[guilds.Guild]) -> typing.Optional[Player]:
+    def get_player(self, guild: snowflakes.SnowflakeishOr[guilds.Guild]) -> typing.Optional[Player]:
+        """Get the player which is active in a specific guild
+
+        Parameters
+        ----------
+        guild: hikari.snowflakes.Snowflakeish[hikari.guilds.Guild]
+            The guild to get the player from.
+
+        Returns
+        -------
+        yougan.player.Player
+            The active player in the guild.
+        """
         try:
             return self.players[int(guild)]
         except KeyError:
@@ -99,7 +103,7 @@ class Node:
         ) as resp:
             payload = await resp.json()
             if payload.get("error", None):
-                raise models.TrackLoadError(f"{payload['error']}: {payload['message']}")
+                raise errors.TrackLoadError(f"{payload['error']}: {payload['message']}")
 
             if payload["loadType"] == "SEARCH_RESULT":
                 tracks = [models.Track.from_dict(track) for track in payload["tracks"]]
@@ -119,9 +123,14 @@ class Node:
 
             elif payload["loadType"] == "LOAD_FAILED":
                 exception = payload["exception"]
-                raise models.TrackLoadError(f'{exception["severity"]}: {exception["message"]}')
+                raise errors.TrackLoadError(f'{exception["severity"]}: {exception["message"]}')
+
+            raise ValueError(f"Recieved unknown response: {payload}")
 
     async def fetch_track(self, track_id: str) -> models.Track:
+
+        if not self.session:
+            raise RuntimeError("Connect to the the node before send a request")
         params = {"track": track_id}
         async with self.session.get(
             f"http://{self.host}:{self.port}/decodetrack",
@@ -132,15 +141,16 @@ class Node:
             payload = {"track": track_id, "info": payload}
             return models.Track.from_dict(payload)
 
-    async def start(self, session: typing.Optional[aiohttp.ClientSession]) -> None:
+    async def start(self) -> None:
         """Connects to the lavalink server using the given credentials."""
         _LOGGER.info("Attempting to connect to Node::%s", self.name)
 
-        self.session = session
-        if not self.session:
-            self.session = session
+        if not self.connection or not self.connection.is_connected:
+            raise errors.NodeAlreadyConnected(self.name)
 
-        self.connection = Connection(host=self.host, port=self.port, password=self.password, node=self)
+        self.connection = Connection(
+            host=self.host, port=self.port, password=self.password, node=self, session=self.session
+        )
         await self.connection.connect_node()
         self.is_connected = True
 
@@ -151,17 +161,22 @@ class Node:
         token: str,
         endpoint: str,
     ) -> None:
-        if not self.is_connected:
-            raise Exception("Node is not connected yet!")
-        await self.connection.connect_vc(session_id, guild, token, endpoint)
+        if not self.connection:
+            raise Exception("Node is not connected yet")
+
+        await self.connection.connect_vc(session_id, str(guild), token, endpoint)
 
     async def _send(self, payload: typing.Dict[str, typing.Any]) -> None:
-        if not self.is_connected:
-            raise Exception("Node is not connected yet!")
+        if not self.connection:
+            raise Exception("Node is not connected yet")
+
         await self.connection.send(payload)
 
     async def destroy(self) -> None:
         """Closes the connection to the lavalink server."""
         _LOGGER.info("Disconnecting from Node::%s", self.name)
+        if not self.connection:
+            return
+
         await self.connection.close()
         self.is_connected = False
